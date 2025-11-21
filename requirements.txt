@@ -4,3 +4,4 @@ django-cors-headers>=4.3
 Pillow>=10.4
 python-decouple>=3.8
 psycopg[binary]>=3.2
+whitenoise

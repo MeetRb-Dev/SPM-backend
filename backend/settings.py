@@ -27,6 +27,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',  # CORS
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -104,3 +105,7 @@ REST_FRAMEWORK = {
 
 # CORS Settings
 CORS_ALLOW_ALL_ORIGINS = True  # For development only
+
+
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
