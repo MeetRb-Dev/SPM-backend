@@ -5,10 +5,24 @@ from django.core.cache import cache
 from .models import Invoice, Person
 from .serializers import InvoiceSerializer
 import hashlib
+from django.db.models import Sum
+
 
 class InvoiceViewSet(viewsets.ModelViewSet):
     queryset = Invoice.objects.all()
     serializer_class = InvoiceSerializer
+
+    def paginate_queryset(self, queryset, request):
+        try:
+            skip = int(request.query_params.get('skip', 0))
+            take = int(request.query_params.get('take', 10))
+            if skip < 0 or take < 1:
+                raise ValueError
+        except ValueError:
+            skip, take = 0, 10  # defaults on invalid input
+
+        return queryset[skip:skip + take]
+
 
     def get_cache_key(self, action_name, filters=None, pk=None):
         """Simple cache keys"""
@@ -38,11 +52,27 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         cache.delete_pattern("rksuppliers:invoice:*")
         print("🗑️ Cache CLEARED")
 
+    from django.db.models import Sum
+
     def list(self, request):
         filters = request.query_params.dict()
         queryset = self.filter_queryset(self.get_queryset())
-        data = self._get_cached_list(queryset, filters)
-        return Response(data)
+
+        # Paginate
+        queryset_paginated = self.paginate_queryset(queryset, request)
+        
+        data = self._get_cached_list(queryset_paginated, filters)
+        
+        # Aggregate totals (without filters to show overall purchase and sale totals)
+        total_purchase = Invoice.objects.filter(invoice_type='purchase').aggregate(total=Sum('amount'))['total'] or 0
+        total_sell = Invoice.objects.filter(invoice_type='sale').aggregate(total=Sum('amount'))['total'] or 0
+        
+        return Response({
+            'total_purchase': total_purchase,
+            'total_sell': total_sell,
+            'results': data,
+        })
+
 
     @action(detail=False, methods=['get'])
     def purchase(self, request):
@@ -72,10 +102,11 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             return response
         return Response(data)
 
-    def update(self, request, pk=None):
-        response = super().update(request, pk)
+    def update(self, request, pk=None, partial=False):
+        response = super().update(request, pk, partial=partial)
         self._invalidate_cache()
         return response
+
 
     def destroy(self, request, pk=None):
         response = super().destroy(request, pk)
@@ -93,3 +124,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         updated_count = invoices.update(is_paid=True)
         self._invalidate_cache()
         return Response({'detail': f'{updated_count} invoices marked as paid.'})
+    
+    @action(detail=False, methods=['get'], url_path='person-names')
+    def person_names(self, request):
+        persons = Person.objects.all().values_list('name', flat=True)
+        return Response({'person_names': list(persons)})
